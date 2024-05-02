@@ -20,6 +20,8 @@ Next up: write a rust program to replace `socat` and figure out how to make the 
 # Research links
 
 * https://aws.amazon.com/blogs/database/aws-nitro-enclaves-for-running-ethereum-validators-part-2/ has a really good diagram showing what needs to happen to contact an external host from inside of a nitro enclave
+  ![image](https://github.com/r-n-o/tls-fetcher/assets/104520680/51c72dfe-4dd0-4e49-92e6-a87269698241)
+
 * `vsock_proxy`, which proxies vsock to inet, is written in Rust: https://github.com/aws/aws-nitro-enclaves-cli/tree/main/vsock_proxy
 * `kmstool-enclave-cli` establishes a connection to vsock proxy to reach KMS APIs. It's open source and available, written in C: https://github.com/aws/aws-nitro-enclaves-sdk-c/blob/main/bin/kmstool-enclave-cli/main.c
 * This comment has a snippet to make an HTTP request over a unix socket with `hyper`: https://github.com/seanmonstar/reqwest/issues/39#issuecomment-2063626443
