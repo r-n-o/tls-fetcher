@@ -1,9 +1,7 @@
-use axum::{
-    body::Body,
-    http::{Method, Request}
-};
-use http_body_util::BodyExt;
+use bytes::Bytes;
+use http_body_util::{BodyExt, Empty};
 use hyper_util::rt::TokioIo;
+use hyper::Request;
 
 use std::path::PathBuf;
 use tokio::net::UnixStream;
@@ -26,16 +24,15 @@ async fn main() {
     });
 
     let request = Request::builder()
-        .method(Method::GET)
+        .method("GET")
         .uri("/socat/")
         .header("Host", "www.dest-unreach.org")
-        .body(Body::empty())
+        .body(Empty::<Bytes>::new())
         .unwrap();
 
     let response = sender.send_request(request).await.unwrap();
     println!("response {}", response.status());
-
-    let body = response.collect().await.unwrap().to_bytes();
-    let body = String::from_utf8(body.to_vec()).unwrap();
+    let body_bytes = response.collect().await.unwrap().to_bytes();
+    let body = String::from_utf8(body_bytes.to_vec()).unwrap();
     println!("response body {}", body);
 }
