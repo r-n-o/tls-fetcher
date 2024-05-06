@@ -1,21 +1,24 @@
-# tls-fetcher
+# TLS Fetcher
 
-Experimentation repo to fetch TLS content over sockets.
+Experimentation repo to fetch TLS content over Unix or VSOCK sockets.
 
-Right now this contains a program to fetch an HTTP (**non**-TLS) response over a UNIX socket.
+Right now this contains a program to fetch TLS response over a UNIX socket which proxies to TCP.
 
-To run it:
+## Running
+
+To run this:
+
 * start a socket proxy with `socat`:
   ```
-  socat UNIX-LISTEN:/tmp/host.sock,reuseaddr,fork TCP:$(dig +short www.dest-unreach.org):80
+  socat UNIX-LISTEN:/tmp/host.sock,reuseaddr,fork TCP:$(dig +short www.googleapis.com|tail -n1):443
   ```
-  the above will proxy connections established at `/tmp/host.sock` to the host for `www.dest-unreach.org` on port 80
-* then run the run program:
+  the above will proxy connections established at `/tmp/host.sock` to the host for `www.googleapis.com` on port 443 (for TLS)
+* Run the Rust program:
   ```
   cargo run
   ```
 
-Next up: write a rust program to replace `socat` and figure out how to make the host dynamic. Also: use HTTPS instead of barebone http.
+Next up: write a rust program to replace `socat` and figure out how to make the host dynamic!
 
 # Research links
 
@@ -25,3 +28,4 @@ Next up: write a rust program to replace `socat` and figure out how to make the 
 * `vsock_proxy`, which proxies vsock to inet, is written in Rust: https://github.com/aws/aws-nitro-enclaves-cli/tree/main/vsock_proxy
 * `kmstool-enclave-cli` establishes a connection to vsock proxy to reach KMS APIs. It's open source and available, written in C: https://github.com/aws/aws-nitro-enclaves-sdk-c/blob/main/bin/kmstool-enclave-cli/main.c
 * This comment has a snippet to make an HTTP request over a unix socket with `hyper`: https://github.com/seanmonstar/reqwest/issues/39#issuecomment-2063626443
+* [this example](https://github.com/rustls/rustls/blob/main/examples/src/bin/simpleclient.rs) from `rustls` shows a simple client

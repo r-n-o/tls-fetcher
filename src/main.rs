@@ -1,38 +1,59 @@
-use bytes::Bytes;
-use http_body_util::{BodyExt, Empty};
-use hyper_util::rt::TokioIo;
-use hyper::Request;
-
 use std::path::PathBuf;
-use tokio::net::UnixStream;
 
-#[tokio::main]
-async fn main() {
-    // real goal here: fetch this over TLS
-    // but for now: can we do HTTP only?
-    //let url = "https://www.googleapis.com/oauth2/v3/certs"; // The URL path used in the actual request
+use std::io::ErrorKind;
+use std::io::{Read, Write};
+use std::os::unix::net::UnixStream;
+use std::sync::Arc;
+use std::str;
 
-    // TODO: this should be flexible and allow for VSOCK or UNIX sockets
-    let socket_path = PathBuf::from("/tmp/host.sock");
-    let stream = TokioIo::new(UnixStream::connect(socket_path).await.unwrap());
+use rustls::RootCertStore;
 
-    let (mut sender, conn) = hyper::client::conn::http1::handshake(stream).await.unwrap();
-    tokio::task::spawn(async move {
-        if let Err(err) = conn.await {
-            println!("Connection failed: {:?}", err);
-        }
-    });
+/// Function to fetch TLS content
+/// - `host` is the FQDN ("www.googleapis.com")
+/// - `path` is the absolute resource path _with_ leading slash ("/oauth2/v3/certs")
+fn fetch_tls_content(socket_path: PathBuf, config: rustls::ClientConfig, host: &str, path: &str) -> Vec<u8> {
+    let server_name = "www.googleapis.com".try_into().unwrap();
+    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
 
-    let request = Request::builder()
-        .method("GET")
-        .uri("/socat/")
-        .header("Host", "www.dest-unreach.org")
-        .body(Empty::<Bytes>::new())
+    // This would be the normal way to connect:
+    //     let mut sock = TcpStream::connect("<host>:<port>").unwrap();
+    // We're instead going through our local (unix) socket which proxies to the right host on port 443 for us (socket proxy)
+    // TODO: this should be flexible and allow for VSOCK or UNIX sockets; we'll want unix socket locally and vsock in production.
+    let mut sock = UnixStream::connect(socket_path).unwrap();
+    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+    
+    let http_request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+    println!("=== making HTTP request: \n{http_request}");    
+
+    tls.write_all(http_request.as_bytes()).unwrap();
+    let ciphersuite = tls
+        .conn
+        .negotiated_cipher_suite()
         .unwrap();
+    
+    println!("=== current ciphersuite: {:?}", ciphersuite.suite());    
+    let mut response_bytes = Vec::new();
+    match tls.read_to_end(&mut response_bytes) {
+        Ok(_) => response_bytes,
+        Err(e) => {
+            // Ignore eof errors: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof
+            if e.kind() == ErrorKind::UnexpectedEof {
+                return response_bytes
+            }
+            panic!("Unexpected error while reading TLS response: {}", e);
+        }
+    }
+}
 
-    let response = sender.send_request(request).await.unwrap();
-    println!("response {}", response.status());
-    let body_bytes = response.collect().await.unwrap().to_bytes();
-    let body = String::from_utf8(body_bytes.to_vec()).unwrap();
-    println!("response body {}", body);
+fn main() {
+    let root_store = RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.into(),
+    };
+    
+    let config: rustls::ClientConfig = rustls::ClientConfig::builder()
+    .with_root_certificates(root_store)
+    .with_no_client_auth();
+
+    let response_bytes = fetch_tls_content(PathBuf::from("/tmp/host.sock"), config, "www.googleapis.com", "/oauth2/v3/certs");
+    println!("Got a response: \n{}", str::from_utf8(&response_bytes).unwrap());
 }
